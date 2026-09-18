@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         UPF Calendar Exporter
 // @namespace    https://github.com/bdim404/upf-calendar-exporter
-// @version      1.0.0
-// @description  Export your UPF timetable to a Google Calendar CSV in one click
+// @version      1.1.0
+// @description  Export your UPF timetable to an .ics or Google Calendar .csv file in one click
 // @author       bdim404
 // @match        https://secretariavirtual.upf.edu/pds/control/PubliHoraAlumCalendario*
 // @license      MIT
@@ -75,14 +75,55 @@
     return rows;
   }
 
-  function download(rows) {
-    const csv = rows.map(r => r.map(esc).join(',')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  function toIcs(sessions, exclude, keepHolidays) {
+    const stamp = d => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
+      'T' + pad(d.getHours()) + pad(d.getMinutes()) + '00';
+    const fold = s => s.replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n');
+
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//upf-calendar-exporter//EN',
+                   'CALSCALE:GREGORIAN'];
+    let n = 0;
+
+    for (const s of sessions) {
+      if (!s.title || !s.start || !s.end) continue;
+      if (!keepHolidays && s.festivoNoLectivo === true) continue;
+
+      const title = s.title.toLowerCase();
+      if (exclude.some(p => title.includes(p))) continue;
+
+      const start = parse(s.start);
+      const end = parse(s.end);
+      const full = s.tipologia ? `${s.title} [${s.tipologia}]` : s.title;
+      const desc = [s.grup, (s.profesores || []).join(', '), s.codAsignatura]
+        .filter(x => x !== undefined && String(x).trim() !== '')
+        .join(' · ');
+
+      lines.push('BEGIN:VEVENT',
+                 `UID:${start.getTime()}-${n++}@upf-calendar-exporter`,
+                 `DTSTART;TZID=Europe/Madrid:${stamp(start)}`,
+                 `DTEND;TZID=Europe/Madrid:${stamp(end)}`,
+                 `SUMMARY:${fold(full)}`);
+      if (s.aula) lines.push(`LOCATION:${fold(s.aula)}`);
+      if (desc) lines.push(`DESCRIPTION:${fold(desc)}`);
+      lines.push('END:VEVENT');
+    }
+
+    lines.push('END:VCALENDAR');
+    return n ? lines.join('\r\n') : null;
+  }
+
+  function save(content, name, mime) {
+    const blob = new Blob([content], { type: mime });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'upf_calendar.csv';
+    a.download = name;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+
+  function downloadCsv(rows) {
+    const csv = rows.map(r => r.map(esc).join(',')).join('\n');
+    save('﻿' + csv, 'upf_calendar.csv', 'text/csv;charset=utf-8');
   }
 
   function ui() {
@@ -96,6 +137,8 @@
       'box-shadow:0 2px 10px rgba(0,0,0,.18)';
 
     const field = 'width:100%;box-sizing:border-box;padding:3px;margin-top:2px';
+    const btnCss = 'flex:1;padding:6px;cursor:pointer;border:1px solid #888;' +
+      'border-radius:4px;background:#f5f5f5;font:inherit';
     box.innerHTML = `
       <div style="font-weight:600;margin-bottom:8px">Export calendar</div>
       <label>From<input id="ce-a" type="date" value="${year}-09-01" style="${field}"></label>
@@ -105,17 +148,21 @@
         <input id="ce-x" type="text" placeholder="e.g. Master Thesis" style="${field}"></label>
       <label style="display:block;margin-top:8px;font-size:12px">
         <input id="ce-h" type="checkbox"> Include holidays</label>
-      <button id="ce-go" style="margin-top:10px;width:100%;padding:6px;cursor:pointer;
-        border:1px solid #888;border-radius:4px;background:#f5f5f5">Download CSV</button>
-      <div id="ce-msg" style="margin-top:7px;font-size:12px;color:#666;min-height:15px"></div>`;
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <button id="ce-ics" style="${btnCss}">.ics</button>
+        <button id="ce-csv" style="${btnCss}">.csv</button>
+      </div>
+      <div style="margin-top:5px;font-size:11px;color:#888">
+        .ics for Apple Calendar · .csv for Google</div>
+      <div id="ce-msg" style="margin-top:6px;font-size:12px;color:#666;min-height:15px"></div>`;
 
     document.body.appendChild(box);
 
     const msg = box.querySelector('#ce-msg');
-    const btn = box.querySelector('#ce-go');
+    const buttons = [box.querySelector('#ce-ics'), box.querySelector('#ce-csv')];
 
-    btn.onclick = async () => {
-      btn.disabled = true;
+    async function run(format) {
+      buttons.forEach(b => b.disabled = true);
       msg.style.color = '#666';
       msg.textContent = 'Fetching...';
 
@@ -127,25 +174,35 @@
 
         const exclude = box.querySelector('#ce-x').value.split(',')
           .map(s => s.trim().toLowerCase()).filter(Boolean);
+        const holidays = box.querySelector('#ce-h').checked;
 
         const data = await fetchSessions(from, to);
-        const rows = toRows(data, exclude, box.querySelector('#ce-h').checked);
+        let count;
 
-        if (rows.length < 2) {
-          msg.textContent = 'No events in that range.';
-          return;
+        if (format === 'ics') {
+          const ics = toIcs(data, exclude, holidays);
+          if (!ics) { msg.textContent = 'No events in that range.'; return; }
+          count = (ics.match(/BEGIN:VEVENT/g) || []).length;
+          save(ics, 'upf_calendar.ics', 'text/calendar;charset=utf-8');
+        } else {
+          const rows = toRows(data, exclude, holidays);
+          if (rows.length < 2) { msg.textContent = 'No events in that range.'; return; }
+          count = rows.length - 1;
+          downloadCsv(rows);
         }
 
-        download(rows);
         msg.style.color = '#0a0';
-        msg.textContent = `${rows.length - 1} events exported.`;
+        msg.textContent = `${count} events exported.`;
       } catch (e) {
         msg.style.color = '#c00';
         msg.textContent = e.message;
       } finally {
-        btn.disabled = false;
+        buttons.forEach(b => b.disabled = false);
       }
-    };
+    }
+
+    box.querySelector('#ce-ics').onclick = () => run('ics');
+    box.querySelector('#ce-csv').onclick = () => run('csv');
   }
 
   ui();

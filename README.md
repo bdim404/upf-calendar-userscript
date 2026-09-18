@@ -1,8 +1,10 @@
 # UPF Calendar Exporter
 
-A userscript that exports your UPF timetable to a CSV file you can import into Google Calendar, Apple Calendar, or Outlook.
+A userscript that exports your UPF timetable to a calendar file you can import into Apple Calendar, Google Calendar, or Outlook.
 
 No login details, no cookies to copy, no command line. Open your timetable, pick a date range, click a button.
+
+![The export panel on the UPF timetable page](docs/screenshot.jpg)
 
 ## Why
 
@@ -29,16 +31,52 @@ This script reads the same data the timetable page already loads and turns it in
    | Exclude subjects | Comma-separated text. Any class whose name contains one of these is skipped — useful for `Master Thesis` and other placeholder entries. Case-insensitive. |
    | Include holidays | Off by default. UPF returns holidays and non-teaching days as fake 11:00–19:00 events, which clutter your calendar. |
 
-4. Click **Download CSV**. The panel reports how many events were exported.
+4. Click **.ics** or **.csv**. The panel reports how many events were exported, and the file lands in your downloads folder.
 
-### Import into Google Calendar
+**Which format?** Use **.ics** for Apple Calendar or any app that subscribes to standard calendar files — it carries the Europe/Madrid timezone, so the times stay correct if you travel. Use **.csv** for Google Calendar's importer. Both contain the same classes.
 
-1. Go to [Google Calendar settings → Import & export](https://calendar.google.com/calendar/r/settings/export).
-2. Select `upf_calendar.csv` and choose a destination calendar.
+## Importing the file
 
-**Create a new calendar first and import into that.** Your classes stay separate from your personal events, so you can recolor or delete them all at once when the timetable changes.
+**Import into a new, empty calendar rather than your main one.** Timetables change, and a separate calendar means you can recolor every class at once, hide them during holidays, or delete the whole set and re-import instead of hunting down events one by one.
 
-Apple Calendar and Outlook accept the same file via **File → Import**.
+### Google Calendar (.csv)
+
+Import must be done on the web — the mobile apps cannot import files.
+
+1. Create the destination calendar: open [Google Calendar](https://calendar.google.com/), then **Settings ⚙ → Settings → Add calendar → Create new calendar**. Name it something like `UPF classes` and click **Create**.
+2. Go to [Settings → Import & export](https://calendar.google.com/calendar/r/settings/export).
+3. Under **Import**, click **Select file from your computer** and choose `upf_calendar.csv`.
+4. In **Add to calendar**, pick the calendar you just created — this dropdown defaults to your personal calendar, so change it here.
+5. Click **Import**. Google confirms with "X events imported".
+
+Once imported, the classes sync to Google Calendar on your phone automatically. To change the colour, hover the calendar name in the left sidebar → **⋮ → pick a colour**.
+
+To remove them later, go to **Settings → the calendar's name → Remove calendar**. That deletes all imported classes at once.
+
+Google also accepts the `.ics` file through the same importer, if you prefer.
+
+### Apple Calendar (.ics)
+
+Apple Calendar does not read CSV, so use the **.ics** file here. Importing is done on a Mac — iOS has no file import — and once the events are in an iCloud calendar they appear on your iPhone and iPad automatically.
+
+1. Open **Calendar** on your Mac.
+2. Create the destination calendar: **File → New Calendar → iCloud**, and name it `UPF classes`. Choosing iCloud rather than "On My Mac" is what makes it sync to your other devices.
+3. Choose **File → Import**, select `upf_calendar.ics`, and click **Import**.
+4. When asked which calendar to add the events to, pick `UPF classes`.
+
+If you only want the classes on that Mac, create the calendar under **On My Mac** in step 2 instead.
+
+No Mac? Import the `.ics` into [Google Calendar](https://calendar.google.com/calendar/r/settings/export) instead, then add that Google account to your iPhone under **Settings → Calendar → Accounts**.
+
+### Outlook (.csv or .ics)
+
+1. Go to [Outlook on the web](https://outlook.office.com/calendar/) — the desktop app's import is less reliable.
+2. In the left sidebar, click **Add calendar → Create blank calendar**, name it `UPF classes`, and save.
+3. Click **Add calendar → Upload from file**, choose either file, select `UPF classes` as the destination, and click **Import**.
+
+### After importing
+
+Spot-check a couple of classes against the timetable page — especially the first week and a week after the winter break — to confirm the times and rooms line up. If the timetable changes mid-year, delete the calendar and re-import rather than editing events by hand.
 
 ## What you get
 
@@ -47,7 +85,8 @@ One event per class, with:
 - **Title** — subject name and session type, e.g. `Machine Learning for Sound and Music [Theory]`
 - **Location** — room number, e.g. `52.329`
 - **Description** — group, teachers, and subject code
-- Events marked private; the file is UTF-8 with BOM, so accented names survive Excel
+- **.ics** — events pinned to the Europe/Madrid timezone
+- **.csv** — UTF-8 with BOM, so accented subject names survive Excel
 
 ## Troubleshooting
 
